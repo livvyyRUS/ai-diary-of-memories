@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Слоёная галерея</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background: #fff;
+            color: #333;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 20px;
+        }
+        .page-title {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 40px;
+            text-align: center;
+            color: #0073e6;
+        }
+        .gallery-container {
+            max-width: 1200px;
+            width: 100%;
+            position: relative;
+        }
+        .photo-layer {
+            position: relative;
+            margin-bottom: 30px;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            transition: transform 0.3s ease;
+        }
+        .photo-layer:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+        }
+        .gallery-img {
+            display: block;
+            width: 100%;
+            height: 70vh;
+            min-height: 400px;
+            object-fit: cover;
+        }
+        .controls-layer {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            margin-bottom: 40px;
+            flex-wrap: wrap;
+        }
+        .nav-button {
+            background: #0073e6;
+            color: #fff;
+            border: none;
+            padding: 0;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 28px;
+            line-height: 50px;
+            text-align: center;
+            transition: background 0.3s ease, transform 0.3s ease;
+        }
+        .nav-button:hover {
+            background: #005bb5;
+            transform: translateY(-2px);
+        }
+        .date-select {
+            font-size: 16px;
+            padding: 10px 20px;
+            border: 1px solid #0073e6;
+            border-radius: 8px;
+            background: #fff;
+            color: #333;
+            cursor: pointer;
+            transition: border-color 0.3s ease;
+            width: 160px;
+            text-align: center;
+        }
+        .date-select:focus,
+        .date-select:hover {
+            border-color: #005bb5;
+            outline: none;
+        }
+        .text-layer {
+            background: #f7f8fa;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        }
+        .description {
+            font-size: 18px;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            text-align: center;
+        }
+        /* Стили для календаря */
+        .flatpickr-calendar {
+            font-family: 'Montserrat', sans-serif;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            border-radius: 8px;
+        }
+        .flatpickr-day.selected {
+            background: #0073e6;
+            border-color: #0073e6;
+        }
+        .flatpickr-day.disabled {
+            color: #ccc;
+            cursor: not-allowed;
+        }
+        .flatpickr-day:hover:not(.disabled) {
+            background: #e6f0fa;
+        }
+        /* Адаптивность */
+        @media (max-width: 768px) {
+            .gallery-img {
+                height: 50vh;
+                min-height: 250px;
+            }
+            .nav-button {
+                width: 45px;
+                height: 45px;
+                font-size: 24px;
+            }
+            .date-select {
+                font-size: 14px;
+                width: 140px;
+            }
+            .description {
+                font-size: 16px;
+            }
+            .page-title {
+                font-size: 24px;
+            }
+            .flatpickr-calendar {
+                max-width: 280px;
+            }
+        }
+    </style>
+</head>
+<body>
+<h1 class="page-title">ИИ-ДНЕВНИК ВОСПОМИНАНИЙ</h1>
+
+<div class="gallery-container">
+    <div class="photo-layer">
+        <img src="" class="gallery-img" alt="Фото">
+    </div>
+
+    <div class="controls-layer">
+        <button class="nav-button prev">&lt;</button>
+        <input type="text" class="date-select" id="dateSelect" readonly placeholder="Выберите дату">
+        <button class="nav-button next">&gt;</button>
+    </div>
+
+    <div class="text-layer">
+        <div class="description" id="description">
+            <!-- Описание будет подставляться из данных -->
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://npmcdn.com/flatpickr/dist/l10n/ru.js"></script>
+<script>
+    // Данные, переданные из FastAPI.
+    // Ожидается, что galleryData - массив объектов вида:
+    // { date: "день-месяц-год", img: "url", text: "описание" }
+    const galleryData = {{ gallery_data | safe }};
+
+    // Функция для парсинга строки даты "ДД-ММ-ГГГГ" в объект Date.
+    const parseRussianDate = (dateString) => {
+        const [day, month, year] = dateString.split('-');
+        return new Date(year, month - 1, day);
+    };
+
+    // Группировка фотографий по датам.
+    const galleryByDate = {};
+    galleryData.forEach(item => {
+        if (!galleryByDate[item.date]) {
+            galleryByDate[item.date] = [];
+        }
+        galleryByDate[item.date].push({
+            img: item.img,
+            text: item.text,
+            dateObj: parseRussianDate(item.date)
+        });
+    });
+
+    // Получаем отсортированный массив уникальных дат (в виде строк) по возрастанию даты.
+    const uniqueDates = Object.keys(galleryByDate).sort((a, b) => {
+        return parseRussianDate(a) - parseRussianDate(b);
+    });
+
+    // Для календаря: преобразуем каждую уникальную дату в объект Date.
+    const enabledDates = uniqueDates.map(dateStr => parseRussianDate(dateStr));
+
+    const elements = {
+        galleryImg: document.querySelector('.gallery-img'),
+        dateInput: document.getElementById('dateSelect'),
+        description: document.getElementById('description'),
+        prevButton: document.querySelector('.prev'),
+        nextButton: document.querySelector('.next')
+    };
+
+    let currentDateIndex = 0; // индекс в uniqueDates
+    let currentPhotoIndex = 0; // индекс фото в массиве galleryByDate для выбранной даты
+
+    // Инициализация календаря.
+    const calendar = flatpickr(elements.dateInput, {
+        locale: 'ru',
+        dateFormat: 'd M Y',
+        defaultDate: enabledDates[0],
+        enable: enabledDates,
+        onChange: (selectedDates) => {
+            if (!selectedDates.length) return;
+            const selectedDate = selectedDates[0].toDateString();
+            // Находим индекс выбранной даты среди уникальных дат.
+            const index = enabledDates.findIndex(date => date.toDateString() === selectedDate);
+            if (index > -1) {
+                currentDateIndex = index;
+                currentPhotoIndex = 0; // при смене даты показываем первое фото
+                updateGallery();
+            }
+        }
+    });
+
+    function updateGallery() {
+        const dateKey = uniqueDates[currentDateIndex];
+        const photos = galleryByDate[dateKey];
+        // Обновляем изображение и описание
+        elements.galleryImg.src = photos[currentPhotoIndex].img;
+        elements.description.textContent = photos[currentPhotoIndex].text;
+        // Обновляем выбранную дату в календаре
+        calendar.setDate(enabledDates[currentDateIndex], true);
+    }
+
+    elements.prevButton.addEventListener('click', () => {
+        const photos = galleryByDate[uniqueDates[currentDateIndex]];
+        if (currentPhotoIndex > 0) {
+            currentPhotoIndex--;
+        } else {
+            // Если на текущей дате первое фото, переходим к предыдущей дате (если есть)
+            if (currentDateIndex > 0) {
+                currentDateIndex--;
+                const prevPhotos = galleryByDate[uniqueDates[currentDateIndex]];
+                currentPhotoIndex = prevPhotos.length - 1;
+            } else {
+                // Если это первая дата, то переходим к последней дате и последнему фото
+                currentDateIndex = uniqueDates.length - 1;
+                const lastPhotos = galleryByDate[uniqueDates[currentDateIndex]];
+                currentPhotoIndex = lastPhotos.length - 1;
+            }
+        }
+        updateGallery();
+    });
+
+    elements.nextButton.addEventListener('click', () => {
+        const photos = galleryByDate[uniqueDates[currentDateIndex]];
+        if (currentPhotoIndex < photos.length - 1) {
+            currentPhotoIndex++;
+        } else {
+            // Если на текущей дате последнее фото, переходим к следующей дате (если есть)
+            if (currentDateIndex < uniqueDates.length - 1) {
+                currentDateIndex++;
+                currentPhotoIndex = 0;
+            } else {
+                // Если это последняя дата, переходим к первой дате
+                currentDateIndex = 0;
+                currentPhotoIndex = 0;
+            }
+        }
+        updateGallery();
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowLeft') elements.prevButton.click();
+        if (e.key === 'ArrowRight') elements.nextButton.click();
+    });
+
+    // Инициализируем галерею при загрузке страницы.
+    updateGallery();
+</script>
+</body>
+</html>
